@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo List with Pomodoro Timer</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      background-color: white;
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0px 15px 30px rgba(0, 0, 0, 0.1);
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 {
+      font-size: 2em;
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .add-todo {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    input[type="text"] {
+      padding: 10px;
+      width: 70%;
+      font-size: 16px;
+      border: 2px solid #ff9a9e;
+      border-radius: 5px;
+    }
+    .btn {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      background-color: #ff9a9e;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+    .btn:hover {
+      background-color: #ff6f7d;
+    }
+    .todo-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 10px 0;
+      padding: 10px;
+      background-color: #f9f9f9;
+      border-radius: 5px;
+      box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.05);
+    }
+    .task-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+    .task-details {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-grow: 1;
+    }
+    .task-text {
+      flex-grow: 1;
+      padding-right: 15px;
+      text-align: left;
+      color: #333;
+      font-size: 16px;
+    }
+    .timer {
+      font-size: 14px;
+      width: 60px;
+      text-align: right;
+      color: #555;
+    }
+    .motivational-link {
+      margin-top: 20px;
+    }
+    .motivational-link button {
+      background-color: #ff9a9e;
+      color: white;
+      border-radius: 5px;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    .motivational-link button:hover {
+      background-color: #ff6f7d;
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Todo List with Pomodoro Timer</h1>
+    <div class="add-todo">
+      <input type="text" id="todo-input" placeholder="Enter your task" onkeydown="if (event.key === 'Enter') addTodo()">
+      <button class="btn" onclick="addTodo()">Add Task</button>
+    </div>
+    <ul id="todo-list"></ul>
+    <div class="motivational-link">
+      <button onclick="getMotivation()">Need Motivation?</button>
+    </div>
+  </div>
+
+  <script>
+    let todoList = JSON.parse(localStorage.getItem('todos')) || []; // Load from localStorage or initialize empty
+
+    function addTodo() {
+      const input = document.getElementById('todo-input');
+      const task = input.value;
+      if (task) {
+        const todo = {
+          task: task,
+          timer: 1500, // 25 minutes Pomodoro timer
+          interval: null,
+          isPaused: false,
+          pomodorosCompleted: 0,
+          startTime: null // For persistent timer
+        };
+        todoList.push(todo);
+        input.value = '';
+        saveTodos(); // Save tasks after adding
+        renderTodoList();
+      }
+    }
+
+    function renderTodoList() {
+      const list = document.getElementById('todo-list');
+      list.innerHTML = '';
+      todoList.forEach((todo, index) => {
+        const listItem = document.createElement('li');
+        listItem.className = 'todo-item';
+        
+        const taskContainer = document.createElement('div');
+        taskContainer.className = 'task-container';
+
+        const taskDetails = document.createElement('div');
+        taskDetails.className = 'task-details';
+        
+        const taskDiv = document.createElement('div');
+        taskDiv.className = 'task-text';
+        taskDiv.textContent = todo.task;
+        
+        const timerDiv = document.createElement('div');
+        timerDiv.className = 'timer';
+        timerDiv.textContent = formatTime(todo.timer);
+
+        const startButton = document.createElement('button');
+        startButton.className = 'btn';
+        startButton.textContent = todo.isPaused ? 'Resume' : 'Start';
+        startButton.onclick = () => startPomodoro(index, timerDiv, startButton);
+
+        const pauseButton = document.createElement('button');
+        pauseButton.className = 'btn';
+        pauseButton.textContent = 'Pause';
+        pauseButton.onclick = () => pausePomodoro(index, startButton);
+
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'btn';
+        deleteButton.textContent = 'Delete';
+        deleteButton.onclick = () => deleteTask(index);
+
+        const buttonContainer = document.createElement('div');
+        buttonContainer.appendChild(startButton);
+        buttonContainer.appendChild(pauseButton);
+        buttonContainer.appendChild(deleteButton);
+
+        taskDetails.appendChild(taskDiv);
+        taskDetails.appendChild(timerDiv);
+
+        taskContainer.appendChild(taskDetails);
+        taskContainer.appendChild(buttonContainer);
+
+        listItem.appendChild(taskContainer);
+        list.appendChild(listItem);
+
+        // If the task was started previously, continue running it
+        if (todo.startTime) {
+          const elapsedTime = Math.floor((Date.now() - todo.startTime) / 1000);
+          todo.timer = Math.max(0, 1500 - elapsedTime);
+          if (todo.timer === 0) {
+            clearInterval(todo.interval);
+            alert(`Time's up for task: ${todo.task}`);
+          }
+          timerDiv.textContent = formatTime(todo.timer);
+        }
+      });
+    }
+
+    function formatTime(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+    }
+
+    function startPomodoro(index, timerDiv, startButton) {
+      if (todoList[index].interval) return; // Prevent multiple intervals
+
+      todoList[index].isPaused = false;
+      todoList[index].startTime = Date.now(); // Save start time
+      startButton.textContent = 'Resume'; // Update button text
+      todoList[index].interval = setInterval(() => {
+        if (todoList[index].timer > 0 && !todoList[index].isPaused) {
+          todoList[index].timer--;
+          timerDiv.textContent = formatTime(todoList[index].timer);
+          saveTodos(); // Save the updated timer every second
+        } else if (todoList[index].timer === 0) {
+          clearInterval(todoList[index].interval);
+          todoList[index].interval = null;
+          todoList[index].pomodorosCompleted++;
+          handleBreak(index);
+        }
+      }, 1000);
+    }
+
+    function handleBreak(index) {
+      let breakTime;
+      if (todoList[index].pomodorosCompleted % 4 === 0) {
+        breakTime = 900; // Long break (15 minutes) after 4 Pomodoros
+        alert(`Take a long break for task: ${todoList[index].task}`);
+      } else {
+        breakTime = 300; // Short break (5 minutes)
+        alert(`Take a short break for task: ${todoList[index].task}`);
+      }
+      todoList[index].timer = breakTime;
+      saveTodos();
+      renderTodoList();
+    }
+
+    function pausePomodoro(index, startButton) {
+      if (todoList[index].interval) {
+        todoList[index].isPaused = true;
+        startButton.textContent = 'Resume'; // Update button text
+        clearInterval(todoList[index].interval);
+        todoList[index].interval = null;
+        saveTodos(); // Save the paused state
+      }
+    }
+
+    function deleteTask(index) {
+      clearInterval(todoList[index].interval);
+      todoList.splice(index, 1);
+      saveTodos();
+      renderTodoList();
+    }
+
+    function saveTodos() {
+      localStorage.setItem('todos', JSON.stringify(todoList));
+    }
+
+    function getMotivation() {
+      window.open('https://www.youtube.com/results?search_query=motivational+videos', '_blank');
+    }
+
+    // Initial rendering of saved todos
+    renderTodoList();
+  </script>
+</body>
+</html>
